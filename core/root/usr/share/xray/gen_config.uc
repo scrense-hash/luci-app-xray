@@ -69,7 +69,7 @@ function outbounds(proxy, config, manual_tproxy, bridge, extra_inbound, fakedns)
     ];
     let outbound_balancers_all = {};
     for (let b in ["tcp_balancer_v4", "udp_balancer_v4", "tcp_balancer_v6", "udp_balancer_v6"]) {
-        for (let i in balancer(proxy, b, b)) {
+        for (let i in balancer(proxy, b, b, config)) {
             if (i != "direct") {
                 outbound_balancers_all[i] = true;
             }
@@ -77,7 +77,7 @@ function outbounds(proxy, config, manual_tproxy, bridge, extra_inbound, fakedns)
     }
     for (let e in extra_inbound) {
         if (e["specify_outbound"] == "1") {
-            for (let i in balancer(e, "destination", `extra_inbound:${e[".name"]}`)) {
+            for (let i in balancer(e, "destination", `extra_inbound:${e[".name"]}`, config)) {
                 if (i != "direct") {
                     outbound_balancers_all[i] = true;
                 }
@@ -85,19 +85,26 @@ function outbounds(proxy, config, manual_tproxy, bridge, extra_inbound, fakedns)
         }
     }
     for (let f in fakedns) {
-        for (let i in balancer(f, "fake_dns_forward_server_tcp", `fake_dns_tcp:${f[".name"]}`)) {
+        for (let i in balancer(f, "fake_dns_forward_server_tcp", `fake_dns_tcp:${f[".name"]}`, config)) {
             if (i != "direct") {
                 outbound_balancers_all[i] = true;
             }
         }
-        for (let i in balancer(f, "fake_dns_forward_server_udp", `fake_dns_udp:${f[".name"]}`)) {
+        for (let i in balancer(f, "fake_dns_forward_server_udp", `fake_dns_udp:${f[".name"]}`, config)) {
             if (i != "direct") {
                 outbound_balancers_all[i] = true;
             }
         }
     }
     for (let i in keys(outbound_balancers_all)) {
-        push(result, ...server_outbound(config[substr(i, -9)], i, config));
+        const split_port = split(i, "@port:");
+        const split_server = split(split_port[0], "@balancer_outbound:");
+        if (length(split_server) != 2) {
+            continue;
+        }
+        const server_name = split_server[1];
+        const forced_port = length(split_port) > 1 ? split_port[1] : null;
+        push(result, ...server_outbound(config[server_name], i, config, forced_port));
     }
     return result;
 }
@@ -222,7 +229,7 @@ function rules(proxy, bridge, manual_tproxy, extra_inbound, fakedns) {
     return result;
 }
 
-function balancers(proxy, extra_inbound, fakedns) {
+function balancers(proxy, extra_inbound, fakedns, config) {
     const general_balancer_strategy = proxy["general_balancer_strategy"] || "random";
     const built_in_outbounds = ["tcp_outbound_v4", "udp_outbound_v4", "tcp_outbound_v6", "udp_outbound_v6"];
     const built_in_balancers = ["tcp_balancer_v4", "udp_balancer_v4", "tcp_balancer_v6", "udp_balancer_v6"];
@@ -230,14 +237,14 @@ function balancers(proxy, extra_inbound, fakedns) {
         ...map(built_in_balancers, function (balancer_tag, index) {
             return {
                 "tag": built_in_outbounds[index],
-                "selector": balancer(proxy, balancer_tag, balancer_tag),
+                "selector": balancer(proxy, balancer_tag, balancer_tag, config),
                 "strategy": {
                     "type": general_balancer_strategy
                 }
             };
         }),
-        ...extra_inbound_balancers(extra_inbound),
-        ...fake_dns_balancers(fakedns),
+        ...extra_inbound_balancers(extra_inbound, config),
+        ...fake_dns_balancers(fakedns, config),
     ];
 };
 
@@ -280,7 +287,7 @@ function gen_config() {
         routing: {
             domainStrategy: general["routing_domain_strategy"] || "AsIs",
             rules: rules(general, bridge, manual_tproxy, extra_inbound, fakedns),
-            balancers: balancers(general, extra_inbound, fakedns)
+            balancers: balancers(general, extra_inbound, fakedns, config)
         }
     });
 }

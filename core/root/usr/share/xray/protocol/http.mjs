@@ -1,11 +1,12 @@
 "use strict";
 
-import { port_array, stream_settings } from "../common/stream.mjs";
+import { outbound_port, stream_settings } from "../common/stream.mjs";
 
-export function http_outbound(server, tag) {
+export function http_outbound(server, tag, forced_port) {
     const stream_settings_object = stream_settings(server, "http", tag);
     const stream_settings_result = stream_settings_object["stream_settings"];
     const dialer_proxy = stream_settings_object["dialer_proxy"];
+    const port = outbound_port(server["server_port"], forced_port);
     let users = null;
     if (server["username"] && server["password"]) {
         users = [
@@ -20,13 +21,11 @@ export function http_outbound(server, tag) {
             protocol: "http",
             tag: tag,
             settings: {
-                servers: map(port_array(server["server_port"]), function (v) {
-                    return {
-                        address: server["server"],
-                        port: v,
-                        users: users
-                    };
-                })
+                servers: [{
+                    address: server["server"],
+                    port: port,
+                    users: users
+                }]
             },
             streamSettings: stream_settings_result
         },

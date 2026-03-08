@@ -15,7 +15,7 @@ define Package/$(PKG_NAME)
 	SECTION:=Custom
 	CATEGORY:=Extra packages
 	TITLE:=LuCI Support for Xray (geodata page)
-	DEPENDS:=luci-app-xray +xray-geodata
+	DEPENDS:=luci-app-xray +xray-geodata +lua
 	PKGARCH:=all
 endef
 
@@ -30,6 +30,8 @@ endef
 define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/xray
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/geodata.js $(1)/www/luci-static/resources/view/xray/geodata.js
+	$(INSTALL_DIR) $(1)/usr/libexec/rpcd
+	$(INSTALL_BIN) ./root/usr/libexec/rpcd/xray_geodata $(1)/usr/libexec/rpcd/xray_geodata
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
 	$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-xray-geodata.json $(1)/usr/share/luci/menu.d/luci-app-xray-geodata.json
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d

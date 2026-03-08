@@ -1,12 +1,19 @@
 'use strict';
 'require dom';
 'require fs';
+'require rpc';
 'require uci';
 'require ui';
 'require view';
 'require view.xray.shared as shared';
 
 const maxResults = 2048;
+const callGeoLookup = rpc.declare({
+    object: 'xray_geodata',
+    method: 'lookup',
+    params: ['value'],
+    expect: { '': {} }
+});
 
 const WireType = {
     VARINT: 0,
@@ -253,15 +260,6 @@ function decodeGeoIPList(buffer) {
     return geoIPList;
 }
 
-function matchesDomain(subdomain, domain) {
-    const lowerDomain = domain.toLowerCase();
-    const lowerSubdomain = subdomain.toLowerCase();
-    if (lowerSubdomain === lowerDomain) {
-        return true;
-    }
-    return lowerSubdomain.endsWith('.' + lowerDomain);
-}
-
 function matchesCIDR(cidrIp, prefix, queryIp) {
     // Check if input IP matches CIDR IP version
     if ((cidrIp.length === 4 && queryIp.length !== 4) || (cidrIp.length === 16 && queryIp.length !== 16)) {
@@ -293,7 +291,7 @@ function renderGeoIPResults(results) {
     const table = E('table', { 'class': 'table' }, [
         E('thead', {}, [
             E('tr', { 'class': 'tr table-titles' }, [
-                E('th', { 'class': 'th' }, _('Country Code')),
+                E('th', { 'class': 'th' }, _('GeoIP Code')),
                 E('th', { 'class': 'th' }, _(`CIDR (${flatResults.length} total)`))
             ])
         ]),
@@ -323,7 +321,7 @@ function renderGeoSiteResults(results) {
     const table = E('table', { 'class': 'table' }, [
         E('thead', {}, [
             E('tr', { 'class': 'tr table-titles' }, [
-                E('th', { 'class': 'th' }, _('Country Code')),
+                E('th', { 'class': 'th' }, _('Category')),
                 E('th', { 'class': 'th' }, _(`Domain (${flatResults.length} total)`))
             ])
         ]),
@@ -335,6 +333,37 @@ function renderGeoSiteResults(results) {
         ))
     ]);
 
+    container.appendChild(table);
+}
+
+function renderGeoLookupResults(results, geoType, query) {
+    const container = document.getElementById('geosite-results');
+    container.innerHTML = '<br/>';
+
+    if (!results || results.length === 0) {
+        container.appendChild(E('p', { 'class': 'cbi-map-descr' }, _('No results were found!')));
+        return;
+    }
+
+    const keyLabel = geoType === 'geosite' ? _('Category') : _('GeoIP Code');
+    const rulePrefix = geoType + ':';
+
+    const table = E('table', { 'class': 'table' }, [
+        E('thead', {}, [
+            E('tr', { 'class': 'tr table-titles' }, [
+                E('th', { 'class': 'th' }, keyLabel),
+                E('th', { 'class': 'th' }, _(`Geo Rule (${results.length} total)`))
+            ])
+        ]),
+        E('tbody', {}, results.slice(0, maxResults).map((item, index) =>
+            E('tr', { 'class': `tr cbi-rowstyle-${index % 2 + 1}` }, [
+                E('td', { 'class': 'td' }, item.toUpperCase()),
+                E('td', { 'class': 'td' }, `${rulePrefix}${item}`)
+            ])
+        ))
+    ]);
+
+    container.appendChild(E('p', { 'class': 'cbi-map-descr' }, `${_("Query")}: ${query}`));
     container.appendChild(table);
 }
 
@@ -362,7 +391,7 @@ return view.extend({
                             renderGeoIPResults(results);
                         }
                     }, [
-                        E('option', { 'value': '' }, _('Filter GeoIP by Country Code')),
+                        E('option', { 'value': '' }, _('Filter GeoIP by GeoIP Code')),
                         ...Array.from(new Set(geoip_result.entry.map(entry => entry.countryCode)))
                             .sort()
                             .map(code => {
@@ -419,7 +448,7 @@ return view.extend({
                             renderGeoSiteResults(results);
                         }
                     }, [
-                        E('option', { 'value': '' }, _('Filter GeoSite by Country Code')),
+                        E('option', { 'value': '' }, _('Filter GeoSite by Category')),
                         ...Array.from(new Set(geosite_result.entry.map(entry => entry.countryCode)))
                             .sort()
                             .map(code => {
@@ -434,22 +463,47 @@ return view.extend({
                             'type': 'text',
                             'id': 'geosite-search',
                             'class': 'cbi-input-text',
-                            'placeholder': _('Search GeoSite...')
+                            'placeholder': _('Search Domain/IP in GeoData...')
                         }),
                         E('button', {
                             'class': 'cbi-button',
-                            'click': function () {
-                                const query = document.getElementById('geosite-search').value.toLowerCase();
-                                const selectedCode = document.getElementById('geosite-select').value;
-                                const results = geosite_result.entry.map(entry => ({
-                                    ...entry,
-                                    domain: entry.domain.filter(domain => {
-                                        return query && (selectedCode === '' || entry.countryCode === selectedCode) && matchesDomain(query, domain.value);
+                            'click': function (ev) {
+                                const button = ev.currentTarget;
+                                const query = document.getElementById('geosite-search').value.trim();
+                                if (!query) {
+                                    L.ui.addNotification(null, E('p', _('Please enter query content!')));
+                                    return;
+                                }
+
+                                const selectedCode = document.getElementById('geosite-select').value.toLowerCase();
+                                button.disabled = true;
+
+                                return callGeoLookup(query)
+                                    .then(function (res) {
+                                        if (!res || res.code !== 0) {
+                                            const msg = res && res.error ? res.error : _('Geo lookup failed.');
+                                            L.ui.addNotification(null, E('p', msg));
+                                            renderGeoLookupResults([], 'geosite', query);
+                                            button.disabled = false;
+                                            return;
+                                        }
+
+                                        const geoType = res.type || 'geosite';
+                                        let results = Array.isArray(res.results) ? res.results : [];
+                                        if (geoType === 'geosite' && selectedCode !== '') {
+                                            results = results.filter(item => item.toLowerCase() === selectedCode);
+                                        }
+
+                                        renderGeoLookupResults(results, geoType, query);
+                                        button.disabled = false;
                                     })
-                                })).filter(entry => entry.domain.length > 0);
-                                renderGeoSiteResults(results);
+                                    .catch(function (e) {
+                                        L.ui.addNotification(null, E('p', e.message));
+                                        renderGeoLookupResults([], 'geosite', query);
+                                        button.disabled = false;
+                                    });
                             }
-                        }, _('Search GeoSite')),
+                        }, _('Search GeoSite (Lookup)')),
                     ]),
                     E('div', { 'id': 'geosite-results', 'class': 'results-container' })
                 ]),

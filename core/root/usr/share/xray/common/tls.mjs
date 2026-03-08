@@ -22,14 +22,25 @@ export function fallbacks(proxy, config) {
 };
 
 export function tls_outbound_settings(server, protocol) {
+    const insecure = server[protocol + "_tls_insecure"] != "0";
+    const pinned_peer_cert_sha256 = server[protocol + "_tls_pinned_peer_cert_sha256"] || server[protocol + "_tls_pcs"] || "";
+    const verify_peer_cert_by_name = server[protocol + "_tls_verify_peer_cert_by_name"] || server[protocol + "_tls_vcn"] || "";
     let result = {
         serverName: server[protocol + "_tls_host"],
-        allowInsecure: server[protocol + "_tls_insecure"] != "0",
         fingerprint: server[protocol + "_tls_fingerprint"] || ""
     };
 
     if (server[protocol + "_tls_alpn"] != null) {
         result["alpn"] = server[protocol + "_tls_alpn"];
+    }
+    if (pinned_peer_cert_sha256 !== "") {
+        result["pinnedPeerCertSha256"] = pinned_peer_cert_sha256;
+    }
+    if (verify_peer_cert_by_name !== "") {
+        result["verifyPeerCertByName"] = verify_peer_cert_by_name;
+    }
+    if (insecure && pinned_peer_cert_sha256 === "" && verify_peer_cert_by_name === "") {
+        result["allowInsecure"] = true;
     }
 
     return result;

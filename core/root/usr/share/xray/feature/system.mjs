@@ -1,11 +1,30 @@
 "use strict";
 
-export function balancer(ref, x, prefix) {
+import { port_array } from "../common/stream.mjs";
+
+export function balancer(ref, x, prefix, config) {
     const v = ref[x] || [];
     if (length(v) == 0) {
         return ["direct"];
     }
-    return map(v, (k) => `${prefix}@balancer_outbound:${k}`);
+    let result = [];
+    for (let k in v) {
+        const tag = `${prefix}@balancer_outbound:${k}`;
+        const section = config != null ? config[k] : null;
+        if (section == null || section["server_port"] == null) {
+            push(result, tag);
+            continue;
+        }
+        const ports = port_array(section["server_port"]);
+        if (length(ports) <= 1) {
+            push(result, tag);
+            continue;
+        }
+        for (let p in ports) {
+            push(result, `${tag}@port:${p}`);
+        }
+    }
+    return result;
 };
 
 export function api_conf(proxy) {

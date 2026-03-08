@@ -159,17 +159,21 @@ function stream_hysteria(server) {
         };
         let hysteria_up = server["hysteria_up_mbps"] || "";
         if (hysteria_up !== "") {
-            result["up"] = `${hysteria_up}mbps`;
+            result["up"] = hysteria_up + "mbps";
         }
         let hysteria_down = server["hysteria_down_mbps"] || "";
         if (hysteria_down !== "") {
-            result["down"] = `${hysteria_down}mbps`;
+            result["down"] = hysteria_down + "mbps";
         }
         let udphop_port = server["hysteria_udphop_port"] || "";
         if (udphop_port !== "") {
+            let udphop_interval = server["hysteria_udphop_interval"];
+            if (udphop_interval == null || udphop_interval === "") {
+                udphop_interval = 30;
+            }
             result["udphop"] = {
                 port: udphop_port,
-                interval: int(server["hysteria_udphop_interval"] || 30)
+                interval: udphop_interval
             };
         }
         return result;
@@ -182,6 +186,13 @@ export function port_array(i) {
         return map(i, v => int(v));
     }
     return [int(i)];
+};
+
+export function outbound_port(server_ports, forced_port) {
+    if (forced_port != null && forced_port !== "") {
+        return int(forced_port);
+    }
+    return port_array(server_ports)[0];
 };
 
 export function stream_settings(server, protocol, tag) {
@@ -198,7 +209,7 @@ export function stream_settings(server, protocol, tag) {
     let dialer_proxy_tag = null;
     if (server["dialer_proxy"] != null && server["dialer_proxy"] != "disabled") {
         dialer_proxy = server["dialer_proxy"];
-        dialer_proxy_tag = tag + `@dialer_proxy:${dialer_proxy}`;
+        dialer_proxy_tag = tag + "@dialer_proxy:" + dialer_proxy;
     }
     return {
         stream_settings: {

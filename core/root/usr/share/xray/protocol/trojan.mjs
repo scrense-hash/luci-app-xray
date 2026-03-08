@@ -1,6 +1,6 @@
 "use strict";
 
-import { port_array, stream_settings } from "../common/stream.mjs";
+import { outbound_port, stream_settings } from "../common/stream.mjs";
 import { fallbacks, tls_inbound_settings } from "../common/tls.mjs";
 
 function trojan_inbound_user(k) {
@@ -10,23 +10,22 @@ function trojan_inbound_user(k) {
     };
 }
 
-export function trojan_outbound(server, tag) {
+export function trojan_outbound(server, tag, forced_port) {
     const stream_settings_object = stream_settings(server, "trojan", tag);
     const stream_settings_result = stream_settings_object["stream_settings"];
     const dialer_proxy = stream_settings_object["dialer_proxy"];
+    const port = outbound_port(server["server_port"], forced_port);
     return {
         outbound: {
             protocol: "trojan",
             tag: tag,
             settings: {
-                servers: map(port_array(server["server_port"]), function (v) {
-                    return {
-                        address: server["server"],
-                        port: v,
-                        email: server["username"],
-                        password: server["password"]
-                    };
-                })
+                servers: [{
+                    address: server["server"],
+                    port: port,
+                    email: server["username"],
+                    password: server["password"]
+                }]
             },
             streamSettings: stream_settings_result
         },

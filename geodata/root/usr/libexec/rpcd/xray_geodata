@@ -1,0 +1,179 @@
+#!/usr/bin/env lua
+
+local function json_escape(s)
+    s = tostring(s or "")
+    s = s:gsub("\\", "\\\\")
+    s = s:gsub("\"", "\\\"")
+    s = s:gsub("\b", "\\b")
+    s = s:gsub("\f", "\\f")
+    s = s:gsub("\n", "\\n")
+    s = s:gsub("\r", "\\r")
+    s = s:gsub("\t", "\\t")
+    return s
+end
+
+local function shell_quote(s)
+    s = tostring(s or "")
+    return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+local function trim(s)
+    return (tostring(s or ""):match("^%s*(.-)%s*$"))
+end
+
+local function is_ipv4(s)
+    local a, b, c, d = s:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then
+        return false
+    end
+
+    a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+    return a <= 255 and b <= 255 and c <= 255 and d <= 255
+end
+
+local function is_ip(value)
+    if value:find(":", 1, true) then
+        return true
+    end
+
+    return is_ipv4(value)
+end
+
+local function file_exists(path)
+    local f = io.open(path, "rb")
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
+local function find_geodata_path(geo_type)
+    local candidates = {
+        "/usr/share/xray/" .. geo_type .. ".dat",
+        "/usr/share/v2ray/" .. geo_type .. ".dat"
+    }
+
+    for _, path in ipairs(candidates) do
+        if file_exists(path) then
+            return path
+        end
+    end
+
+    return nil
+end
+
+local function geoview_exists()
+    local p = io.popen("command -v geoview 2>/dev/null", "r")
+    if not p then
+        return false
+    end
+    local out = p:read("*a") or ""
+    p:close()
+    return trim(out) ~= ""
+end
+
+local function read_stdin()
+    local chunks = {}
+    while true do
+        local chunk = io.read(4096)
+        if not chunk then
+            break
+        end
+        chunks[#chunks + 1] = chunk
+    end
+    return table.concat(chunks)
+end
+
+local function json_unescape(s)
+    return (s
+        :gsub("\\\\", "\1")
+        :gsub("\\\"", "\"")
+        :gsub("\\/", "/")
+        :gsub("\\b", "\b")
+        :gsub("\\f", "\f")
+        :gsub("\\n", "\n")
+        :gsub("\\r", "\r")
+        :gsub("\\t", "\t")
+        :gsub("\1", "\\"))
+end
+
+local function parse_value_from_json(input)
+    local v = input:match('"value"%s*:%s*"(.-)"')
+    if not v then
+        return ""
+    end
+    return json_unescape(v)
+end
+
+local function output_result(result)
+    local out = {}
+    out[#out + 1] = "{"
+    out[#out + 1] = '"code":' .. tostring(result.code or 1) .. ","
+    out[#out + 1] = '"query":"' .. json_escape(result.query or "") .. '",'
+    out[#out + 1] = '"type":"' .. json_escape(result.type or "") .. '",'
+    if result.error then
+        out[#out + 1] = '"error":"' .. json_escape(result.error) .. '",'
+    end
+    out[#out + 1] = '"results":['
+    for i, v in ipairs(result.results or {}) do
+        if i > 1 then
+            out[#out + 1] = ","
+        end
+        out[#out + 1] = '"' .. json_escape(v) .. '"'
+    end
+    out[#out + 1] = "]}"
+    io.write(table.concat(out))
+end
+
+local function lookup()
+    local input = read_stdin()
+    local query = trim(parse_value_from_json(input))
+    if query == "" then
+        output_result({ code = 1, query = "", type = "", error = "empty query", results = {} })
+        return
+    end
+
+    if not geoview_exists() then
+        output_result({ code = 3, query = query, type = "", error = "geoview not found", results = {} })
+        return
+    end
+
+    local geo_type = is_ip(query) and "geoip" or "geosite"
+    local input_path = find_geodata_path(geo_type)
+    if not input_path then
+        output_result({ code = 2, query = query, type = geo_type, error = "geodata file not found", results = {} })
+        return
+    end
+
+    local cmd = "geoview -type " .. shell_quote(geo_type) ..
+        " -action lookup -input " .. shell_quote(input_path) ..
+        " -value " .. shell_quote(query) .. " -lowmem=true 2>/dev/null"
+
+    local p = io.popen(cmd, "r")
+    local raw = p and (p:read("*a") or "") or ""
+    if p then
+        p:close()
+    end
+
+    local seen = {}
+    local results = {}
+    for line in raw:gmatch("[^\r\n]+") do
+        local item = trim(line):lower()
+        if item ~= "" and not seen[item] then
+            seen[item] = true
+            results[#results + 1] = item
+        end
+    end
+
+    output_result({ code = 0, query = query, type = geo_type, results = results })
+end
+
+if arg[1] == "list" then
+    io.write('{"lookup":{"value":""}}')
+elseif arg[1] == "call" and arg[2] == "lookup" then
+    lookup()
+else
+    io.write('{"error":"unsupported command"}')
+    os.exit(1)
+end

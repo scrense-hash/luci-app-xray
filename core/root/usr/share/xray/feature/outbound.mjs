@@ -21,22 +21,22 @@ function override_custom_config_recursive(x, y) {
     return x;
 }
 
-function server_outbound_recursive(t, server, tag, config) {
+function server_outbound_recursive(t, server, tag, config, forced_port) {
     let outbound_result = null;
     if (server["protocol"] == "vmess") {
-        outbound_result = vmess_outbound(server, tag);
+        outbound_result = vmess_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "vless") {
-        outbound_result = vless_outbound(server, tag);
+        outbound_result = vless_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "shadowsocks") {
-        outbound_result = shadowsocks_outbound(server, tag);
+        outbound_result = shadowsocks_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "trojan") {
-        outbound_result = trojan_outbound(server, tag);
+        outbound_result = trojan_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "http") {
-        outbound_result = http_outbound(server, tag);
+        outbound_result = http_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "socks") {
-        outbound_result = socks_outbound(server, tag);
+        outbound_result = socks_outbound(server, tag, forced_port);
     } else if (server["protocol"] == "hysteria") {
-        outbound_result = hysteria_outbound(server, tag);
+        outbound_result = hysteria_outbound(server, tag, forced_port);
     }
     if (outbound_result == null) {
         die(`unknown outbound server protocol ${server["protocol"]}`);
@@ -64,7 +64,7 @@ function server_outbound_recursive(t, server, tag, config) {
 
     if (dialer_proxy != null) {
         const dialer_proxy_section = config[dialer_proxy];
-        return server_outbound_recursive(result, dialer_proxy_section, `${tag}@dialer_proxy:${dialer_proxy}`, config);
+        return server_outbound_recursive(result, dialer_proxy_section, `${tag}@dialer_proxy:${dialer_proxy}`, config, null);
     }
     return result;
 }
@@ -92,9 +92,9 @@ export function blackhole_outbound() {
     };
 };
 
-export function server_outbound(server, tag, config) {
+export function server_outbound(server, tag, config, forced_port) {
     if (server == null) {
         return [direct_outbound(tag, null, false)];
     }
-    return server_outbound_recursive([], server, tag, config);
+    return server_outbound_recursive([], server, tag, config, forced_port);
 };

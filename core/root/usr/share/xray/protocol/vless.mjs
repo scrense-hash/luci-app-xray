@@ -1,6 +1,6 @@
 "use strict";
 
-import { port_array, stream_settings } from "../common/stream.mjs";
+import { outbound_port, stream_settings } from "../common/stream.mjs";
 import { fallbacks, reality_inbound_settings, tls_inbound_settings } from "../common/tls.mjs";
 
 function vless_inbound_user(k, flow) {
@@ -11,7 +11,7 @@ function vless_inbound_user(k, flow) {
     };
 }
 
-export function vless_outbound(server, tag) {
+export function vless_outbound(server, tag, forced_port) {
     let flow = null;
     if (server["vless_tls"] == "tls") {
         flow = server["vless_flow_tls"];
@@ -24,25 +24,24 @@ export function vless_outbound(server, tag) {
     const stream_settings_object = stream_settings(server, "vless", tag);
     const stream_settings_result = stream_settings_object["stream_settings"];
     const dialer_proxy = stream_settings_object["dialer_proxy"];
+    const port = outbound_port(server["server_port"], forced_port);
     return {
         outbound: {
             protocol: "vless",
             tag: tag,
             settings: {
-                vnext: map(port_array(server["server_port"]), function (v) {
-                    return {
-                        address: server["server"],
-                        port: v,
-                        users: [
-                            {
-                                email: server["username"],
-                                id: server["password"],
-                                flow: flow,
-                                encryption: server["vless_encryption"] || "none"
-                            }
-                        ]
-                    };
-                })
+                vnext: [{
+                    address: server["server"],
+                    port: port,
+                    users: [
+                        {
+                            email: server["username"],
+                            id: server["password"],
+                            flow: flow,
+                            encryption: server["vless_encryption"] || "none"
+                        }
+                    ]
+                }]
             },
             streamSettings: stream_settings_result
         },

@@ -122,13 +122,13 @@ export function extra_inbound_rules(extra_inbound) {
     return result;
 };
 
-export function extra_inbound_balancers(extra_inbound) {
+export function extra_inbound_balancers(extra_inbound, config) {
     let result = [];
     for (let e in extra_inbound) {
         if (e["specify_outbound"] == "1") {
             push(result, {
                 "tag": `extra_inbound_outbound:${e[".name"]}`,
-                "selector": balancer(e, "destination", `extra_inbound:${e[".name"]}`),
+                "selector": balancer(e, "destination", `extra_inbound:${e[".name"]}`, config),
                 "strategy": {
                     "type": e["balancer_strategy"] || "random"
                 }

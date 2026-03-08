@@ -193,7 +193,7 @@ return view.extend({
         o.datatype = 'host';
         o.rmempty = false;
 
-        o = ss.taboption('general', form.DynamicList, 'server_port', _('Server Port'));
+        o = ss.taboption('general', form.DynamicList, 'server_port', _('Server Port'), _('Multiple ports are converted to multiple outbounds and selected by routing balancer.'));
         o.datatype = 'port';
         o.rmempty = false;
         o.modalonly = true;
