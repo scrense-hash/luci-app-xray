@@ -30,6 +30,11 @@ Choose one below:
 * Add `src-git-full luci_app_xray https://github.com/yichya/luci-app-xray` to `feeds.conf.default` and run `./scripts/feeds update -a; ./scripts/feeds install -a`
 * Clone this repository under `package`
 
+Current build target in this repository:
+
+* OpenWrt `24.10.2`
+* Xray-core `26.2.6`
+
 Then find `luci-app-xray` under `Extra Packages`.
 
 ## Installation (Use GitHub actions to build ipks)
@@ -50,6 +55,7 @@ Some features are deprecated / unstable so they are placed in preview app. To en
 
 ## Changelog since 3.7.0
 
+* 2026-03-08 chore: update build target to OpenWrt 24.10.2 and Xray-core 26.2.6
 * 2026-01-14 chore: bump version
 * 2026-01-26 fix: typos and hysteria version check
 
